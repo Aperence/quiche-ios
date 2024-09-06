@@ -24,6 +24,7 @@ mv libev-4.33 libev
 
 cd libev
 
+cp ../build-ios.sh .
 chmod +x build-ios.sh
 ./build-ios.sh
 make
