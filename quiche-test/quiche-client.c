@@ -24,7 +24,6 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "quiche-client.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,6 +46,18 @@
 
 #define MAX_DATAGRAM_SIZE 1350
 
+typedef struct response_part{
+    uint8_t *data;
+    ssize_t len;
+    struct response_part *next;
+} response_part_t;
+
+typedef struct response{
+    response_part_t *head;
+    response_part_t *tail;
+    ssize_t total_len;
+}response_t;
+
 struct conn_io {
     ev_timer timer;
 
@@ -60,9 +71,61 @@ struct conn_io {
     quiche_conn *conn;
 
     quiche_h3_conn *http3;
-    
-    ssize_t total_received;
+
+    bool req_sent;
+    bool settings_received;
+
+    response_t response;
 };
+
+void add_response_part(struct conn_io *conn, uint8_t *data, ssize_t len){
+    response_part_t *new_response = malloc(sizeof(response_part_t));
+    new_response->data = malloc(len);
+    memcpy(new_response->data, data, len);
+    new_response->len = len;
+    new_response->next = NULL;
+    conn->response.total_len += len;
+
+    if (conn->response.head == NULL){
+        conn->response.head = new_response;
+        conn->response.tail = new_response;
+    }else{
+        conn->response.tail->next = new_response;
+        conn->response.tail = new_response;
+    }
+}
+
+uint8_t *construct_full_response(response_t response){
+    uint8_t *ret = malloc(response.total_len+1);
+    int offset = 0;
+    response_part_t *res = response.head;
+    while (res){
+        memcpy(ret + offset, res->data, res->len);
+        offset += res->len;
+        res = res->next;
+    }
+    ret[offset] = '\0';
+    return ret;
+}
+
+void free_responses(response_t response){
+    response_part_t *res = response.head;
+    response_part_t *temp;
+    while (res){
+        temp = res;
+        res = res->next;
+        free(temp->data);
+        free(temp);
+    }
+}
+
+http_response_t *new_response(int status, uint8_t *res, ssize_t len){
+    http_response_t *response = malloc(sizeof(http_response_t));
+    response->status = status;
+    response->data = res;
+    response->len = len;
+    return response;
+}
 
 static void debug_log(const char *line, void *argp) {
     fprintf(stderr, "%s\n", line);
@@ -122,8 +185,6 @@ static int for_each_header(uint8_t *name, size_t name_len,
 }
 
 static void recv_cb(EV_P_ ev_io *w, int revents) {
-    static bool req_sent = false;
-    static bool settings_received = false;
 
     struct conn_io *conn_io = w->data;
 
@@ -175,7 +236,7 @@ static void recv_cb(EV_P_ ev_io *w, int revents) {
         return;
     }
 
-    if (quiche_conn_is_established(conn_io->conn) && !req_sent) {
+    if (quiche_conn_is_established(conn_io->conn) && !conn_io->req_sent) {
         const uint8_t *app_proto;
         size_t app_proto_len;
 
@@ -246,7 +307,7 @@ static void recv_cb(EV_P_ ev_io *w, int revents) {
 
         fprintf(stderr, "sent HTTP request %" PRId64 "\n", stream_id);
 
-        req_sent = true;
+        conn_io->req_sent = true;
     }
 
     if (quiche_conn_is_established(conn_io->conn)) {
@@ -261,13 +322,13 @@ static void recv_cb(EV_P_ ev_io *w, int revents) {
                 break;
             }
 
-            if (!settings_received) {
+            if (!conn_io->settings_received) {
                 int rc = quiche_h3_for_each_setting(conn_io->http3,
                                                     for_each_setting,
                                                     NULL);
 
                 if (rc == 0) {
-                    settings_received = true;
+                    conn_io->settings_received = true;
                 }
             }
 
@@ -293,14 +354,15 @@ static void recv_cb(EV_P_ ev_io *w, int revents) {
                             break;
                         }
 
-                        conn_io->total_received += len;
+                        printf("%.*s", (int) len, buf);
+                        add_response_part(conn_io, buf, len);
                     }
 
                     break;
                 }
 
                 case QUICHE_H3_EVENT_FINISHED:
-                    if (quiche_conn_close(conn_io->conn, true, 0, NULL, 0) < 0) {
+                    if (quiche_conn_close(conn_io->conn, true, 0, (uint8_t *) "", 0) < 0) {
                         fprintf(stderr, "failed to close connection\n");
                     }
                     break;
@@ -308,7 +370,7 @@ static void recv_cb(EV_P_ ev_io *w, int revents) {
                 case QUICHE_H3_EVENT_RESET:
                     fprintf(stderr, "request was reset\n");
 
-                    if (quiche_conn_close(conn_io->conn, true, 0, NULL, 0) < 0) {
+                    if (quiche_conn_close(conn_io->conn, true, 0, (uint8_t *) "", 0) < 0) {
                         fprintf(stderr, "failed to close connection\n");
                     }
                     break;
@@ -352,15 +414,7 @@ static void timeout_cb(EV_P_ ev_timer *w, int revents) {
     }
 }
 
-response_t *new_response(int status, char *res, int nb_bytes){
-    response_t *response = malloc(sizeof(response_t));
-    response->status = status;
-    response->res = res;
-    response->number_bytes = nb_bytes;
-    return response;
-}
-
-response_t *fetch(const char *host, const char *port){
+http_response_t *fetch(const char *host, const char *port){
     const struct addrinfo hints = {
         .ai_family = PF_UNSPEC,
         .ai_socktype = SOCK_DGRAM,
@@ -450,10 +504,14 @@ response_t *fetch(const char *host, const char *port){
         return new_response(-1, NULL, 0);
     }
 
-    conn_io->total_received = 0;
     conn_io->sock = sock;
     conn_io->conn = conn;
     conn_io->host = host;
+    conn_io->req_sent = false;
+    conn_io->settings_received = false;
+    conn_io->response.head = NULL;
+    conn_io->response.tail = NULL;
+    conn_io->response.total_len = 0;
 
     ev_io watcher;
 
@@ -478,5 +536,9 @@ response_t *fetch(const char *host, const char *port){
 
     quiche_config_free(config);
 
-    return new_response(0, NULL, conn_io->total_received);
+    uint8_t *out_res = construct_full_response(conn_io->response);
+
+    free_responses(conn_io->response);
+
+    return new_response(0, out_res, conn_io->response.total_len);
 }

@@ -9,13 +9,14 @@
 #define quiche_client_h
 
 #include <stdio.h>
+#include <stdint.h>
 
-typedef struct response {
-    int status;
-    char *res;
-    int number_bytes;
-} response_t;
+typedef struct http_response {
+    int status;  // 0 or -1
+    uint8_t *data;  // the response
+    ssize_t len;
+} http_response_t;
 
-response_t *fetch(const char *host, const char *port);
+http_response *fetch(const char *host, const char *port);
 
 #endif /* quiche_client_h */
