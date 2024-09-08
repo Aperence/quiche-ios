@@ -17,6 +17,6 @@ typedef struct http_response {
     ssize_t len;
 } http_response_t;
 
-http_response *fetch(const char *host, const char *port);
+http_response_t *fetch(const char *host, const char *port, const char *path);
 
 #endif /* quiche_client_h */

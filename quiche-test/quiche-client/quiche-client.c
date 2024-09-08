@@ -24,6 +24,7 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include "quiche-client.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,6 +63,7 @@ struct conn_io {
     ev_timer timer;
 
     const char *host;
+    const char *path;
 
     int sock;
 
@@ -288,8 +290,8 @@ static void recv_cb(EV_P_ ev_io *w, int revents) {
                 .name = (const uint8_t *) ":path",
                 .name_len = sizeof(":path") - 1,
 
-                .value = (const uint8_t *) "/",
-                .value_len = sizeof("/") - 1,
+                .value = (const uint8_t *) conn_io->path,
+                .value_len = strlen(conn_io->path),
             },
 
             {
@@ -414,7 +416,7 @@ static void timeout_cb(EV_P_ ev_timer *w, int revents) {
     }
 }
 
-http_response_t *fetch(const char *host, const char *port){
+http_response_t *fetch(const char *host, const char *port, const char *path){
     const struct addrinfo hints = {
         .ai_family = PF_UNSPEC,
         .ai_socktype = SOCK_DGRAM,
@@ -506,7 +508,9 @@ http_response_t *fetch(const char *host, const char *port){
 
     conn_io->sock = sock;
     conn_io->conn = conn;
+    conn_io->http3 = NULL;
     conn_io->host = host;
+    conn_io->path = path;
     conn_io->req_sent = false;
     conn_io->settings_received = false;
     conn_io->response.head = NULL;
@@ -530,7 +534,8 @@ http_response_t *fetch(const char *host, const char *port){
 
     freeaddrinfo(peer);
 
-    quiche_h3_conn_free(conn_io->http3);
+    if (conn_io->http3)
+        quiche_h3_conn_free(conn_io->http3);
 
     quiche_conn_free(conn);
 
@@ -539,6 +544,9 @@ http_response_t *fetch(const char *host, const char *port){
     uint8_t *out_res = construct_full_response(conn_io->response);
 
     free_responses(conn_io->response);
+    
+    if (!conn_io->req_sent)
+        return new_response(-2, NULL, 0);
 
     return new_response(0, out_res, conn_io->response.total_len);
 }

@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1B589C3F2C8D9E2300CED1A5 /* HTMLStringView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B589C3E2C8D9E2300CED1A5 /* HTMLStringView.swift */; };
+		1B589C412C8DA7CB00CED1A5 /* QuicTestUrl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B589C402C8DA7CB00CED1A5 /* QuicTestUrl.swift */; };
 		1BB066402C8AE42B00AC9F43 /* Ev.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1BB0663D2C8AE17800AC9F43 /* Ev.xcframework */; };
 		1BB066412C8AE42B00AC9F43 /* Ev.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 1BB0663D2C8AE17800AC9F43 /* Ev.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		1BBEA8412C8A2E1200055BC9 /* quiche_testApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BBEA8402C8A2E1200055BC9 /* quiche_testApp.swift */; };
@@ -34,6 +36,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1B589C3E2C8D9E2300CED1A5 /* HTMLStringView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTMLStringView.swift; sourceTree = "<group>"; };
+		1B589C402C8DA7CB00CED1A5 /* QuicTestUrl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuicTestUrl.swift; sourceTree = "<group>"; };
 		1BB0663D2C8AE17800AC9F43 /* Ev.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = Ev.xcframework; sourceTree = "<group>"; };
 		1BBEA83D2C8A2E1200055BC9 /* quiche-test.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "quiche-test.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1BBEA8402C8A2E1200055BC9 /* quiche_testApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = quiche_testApp.swift; sourceTree = "<group>"; };
@@ -59,6 +63,32 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		1B589C422C8DA8C200CED1A5 /* quiche-client */ = {
+			isa = PBXGroup;
+			children = (
+				1BBEA8542C8A2F2300055BC9 /* quiche-client.h */,
+				1BBEA8552C8A2F2300055BC9 /* quiche-client.c */,
+			);
+			path = "quiche-client";
+			sourceTree = "<group>";
+		};
+		1B589C432C8DA8D200CED1A5 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				1BBEA8422C8A2E1200055BC9 /* ContentView.swift */,
+				1B589C3E2C8D9E2300CED1A5 /* HTMLStringView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		1B589C442C8DA8E000CED1A5 /* Data */ = {
+			isa = PBXGroup;
+			children = (
+				1B589C402C8DA7CB00CED1A5 /* QuicTestUrl.swift */,
+			);
+			path = Data;
+			sourceTree = "<group>";
+		};
 		1BBEA8342C8A2E1200055BC9 = {
 			isa = PBXGroup;
 			children = (
@@ -79,10 +109,10 @@
 		1BBEA83F2C8A2E1200055BC9 /* quiche-test */ = {
 			isa = PBXGroup;
 			children = (
+				1B589C442C8DA8E000CED1A5 /* Data */,
+				1B589C432C8DA8D200CED1A5 /* Views */,
+				1B589C422C8DA8C200CED1A5 /* quiche-client */,
 				1BBEA8402C8A2E1200055BC9 /* quiche_testApp.swift */,
-				1BBEA8422C8A2E1200055BC9 /* ContentView.swift */,
-				1BBEA8542C8A2F2300055BC9 /* quiche-client.h */,
-				1BBEA8552C8A2F2300055BC9 /* quiche-client.c */,
 				1BBEA8442C8A2E1400055BC9 /* Assets.xcassets */,
 				1BBEA8462C8A2E1400055BC9 /* Preview Content */,
 				1BBEA8532C8A2F2200055BC9 /* quiche-test-Bridging-Header.h */,
@@ -180,7 +210,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				1BBEA8562C8A2F2300055BC9 /* quiche-client.c in Sources */,
+				1B589C412C8DA7CB00CED1A5 /* QuicTestUrl.swift in Sources */,
 				1BBEA8432C8A2E1200055BC9 /* ContentView.swift in Sources */,
+				1B589C3F2C8D9E2300CED1A5 /* HTMLStringView.swift in Sources */,
 				1BBEA8412C8A2E1200055BC9 /* quiche_testApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
