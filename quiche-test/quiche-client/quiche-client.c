@@ -78,11 +78,15 @@ struct conn_io {
     bool settings_received;
 
     response_t response;
+    
+    int failed_malloc;
 };
 
-void add_response_part(struct conn_io *conn, uint8_t *data, ssize_t len){
+int add_response_part(struct conn_io *conn, uint8_t *data, ssize_t len){
     response_part_t *new_response = malloc(sizeof(response_part_t));
+    if (!new_response) return -1;
     new_response->data = malloc(len);
+    if (!new_response->data) return -1;
     memcpy(new_response->data, data, len);
     new_response->len = len;
     new_response->next = NULL;
@@ -95,10 +99,12 @@ void add_response_part(struct conn_io *conn, uint8_t *data, ssize_t len){
         conn->response.tail->next = new_response;
         conn->response.tail = new_response;
     }
+    return 0;
 }
 
 uint8_t *construct_full_response(response_t response){
     uint8_t *ret = malloc(response.total_len+1);
+    if (!ret) return NULL;
     int offset = 0;
     response_part_t *res = response.head;
     while (res){
@@ -356,8 +362,10 @@ static void recv_cb(EV_P_ ev_io *w, int revents) {
                             break;
                         }
 
-                        printf("%.*s", (int) len, buf);
-                        add_response_part(conn_io, buf, len);
+                        if (add_response_part(conn_io, buf, len) == -1){
+                            conn_io->failed_malloc = 1;
+                            ev_break(EV_A_ EVBREAK_ONE);
+                        }
                     }
 
                     break;
@@ -427,25 +435,25 @@ http_response_t *fetch(const char *host, const char *port, const char *path){
 
     struct addrinfo *peer;
     if (getaddrinfo(host, port, &hints, &peer) != 0) {
-        perror("failed to resolve host");
-        return new_response(-1, NULL, 0);
+        char *msg = "failed to resolve host";
+        return new_response(-1, (uint8_t *) msg, strlen(msg));
     }
 
     int sock = socket(peer->ai_family, SOCK_DGRAM, 0);
     if (sock < 0) {
-        perror("failed to create socket");
-        return new_response(-1, NULL, 0);
+        char *msg = "failed to create socket";
+        return new_response(-1, (uint8_t *) msg, strlen(msg));
     }
 
     if (fcntl(sock, F_SETFL, O_NONBLOCK) != 0) {
-        perror("failed to make socket non-blocking");
-        return new_response(-1, NULL, 0);
+        char *msg = "failed to make socket non-blocking";
+        return new_response(-1, (uint8_t *) msg, strlen(msg));
     }
 
     quiche_config *config = quiche_config_new(0xbabababa);
     if (config == NULL) {
-        fprintf(stderr, "failed to create config\n");
-        return new_response(-1, NULL, 0);
+        char *msg = "failed to create config";
+        return new_response(-1, (uint8_t *) msg, strlen(msg));
     }
 
     quiche_config_set_application_protos(config,
@@ -472,28 +480,28 @@ http_response_t *fetch(const char *host, const char *port, const char *path){
     uint8_t scid[LOCAL_CONN_ID_LEN];
     int rng = open("/dev/urandom", O_RDONLY);
     if (rng < 0) {
-        perror("failed to open /dev/urandom");
-        return new_response(-1, NULL, 0);
+        char *msg = "failed to open /dev/urandom";
+        return new_response(-1, (uint8_t *) msg, strlen(msg));
     }
 
     ssize_t rand_len = read(rng, &scid, sizeof(scid));
     if (rand_len < 0) {
-        perror("failed to create connection ID");
-        return new_response(-1, NULL, 0);
+        char *msg = "failed to create connection ID";
+        return new_response(-1, (uint8_t *) msg, strlen(msg));
     }
 
     struct conn_io *conn_io = malloc(sizeof(*conn_io));
     if (conn_io == NULL) {
-        fprintf(stderr, "failed to allocate connection IO\n");
-        return new_response(-1, NULL, 0);
+        char *msg = "failed to allocate connection IO";
+        return new_response(-1, (uint8_t *) msg, strlen(msg));
     }
 
     conn_io->local_addr_len = sizeof(conn_io->local_addr);
     if (getsockname(sock, (struct sockaddr *)&conn_io->local_addr,
                     &conn_io->local_addr_len) != 0)
     {
-        perror("failed to get local address of socket");
-        return new_response(-1, NULL, 0);
+        char *msg = "failed to get local address of socket";
+        return new_response(-1, (uint8_t *) msg, strlen(msg));
     };
 
     quiche_conn *conn = quiche_connect(host, (const uint8_t *) scid, sizeof(scid),
@@ -502,8 +510,8 @@ http_response_t *fetch(const char *host, const char *port, const char *path){
                                        peer->ai_addr, peer->ai_addrlen, config);
 
     if (conn == NULL) {
-        fprintf(stderr, "failed to create connection\n");
-        return new_response(-1, NULL, 0);
+        char *msg = "failed to create connection";
+        return new_response(-1, (uint8_t *) msg, strlen(msg));
     }
 
     conn_io->sock = sock;
@@ -513,6 +521,7 @@ http_response_t *fetch(const char *host, const char *port, const char *path){
     conn_io->path = path;
     conn_io->req_sent = false;
     conn_io->settings_received = false;
+    conn_io->failed_malloc = 0;
     conn_io->response.head = NULL;
     conn_io->response.tail = NULL;
     conn_io->response.total_len = 0;
@@ -540,13 +549,26 @@ http_response_t *fetch(const char *host, const char *port, const char *path){
     quiche_conn_free(conn);
 
     quiche_config_free(config);
+    
+    if (!conn_io->req_sent){
+        char *msg = "failed to send request";
+        return new_response(-2, (uint8_t *) msg, strlen(msg));
+    }
+    
+    if (conn_io->failed_malloc){
+        char *msg = "failed to allocate memory for response";
+        free_responses(conn_io->response);
+        return new_response(-3, (uint8_t *) msg, strlen(msg));
+    }
 
     uint8_t *out_res = construct_full_response(conn_io->response);
 
     free_responses(conn_io->response);
     
-    if (!conn_io->req_sent)
-        return new_response(-2, NULL, 0);
+    if (!out_res){
+        char *msg = "failed to create full response";
+        return new_response(-4, (uint8_t *) msg, strlen(msg));
+    }
 
     return new_response(0, out_res, conn_io->response.total_len);
 }

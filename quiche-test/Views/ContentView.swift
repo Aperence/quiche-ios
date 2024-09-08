@@ -72,6 +72,7 @@ struct ContentView: View {
                 if let response{
                     if response.status != 0{
                         Text("An error occurred: \(response.status)")
+                        Text(response.data!)
                     }else{
                         HTMLStringView(htmlContent: response.data ?? "<p>Empty response</p>")
                             .frame(maxWidth: /*@START_MENU_TOKEN@*/.infinity/*@END_MENU_TOKEN@*/, minHeight: 600)
